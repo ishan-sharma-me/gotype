@@ -1,0 +1,52 @@
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	// --- parallel: all branches run concurrently, wait for all ---
+	fmt.Println("=== parallel ===")
+	start := time.Now()
+	parallel {
+		branch "fast" {
+			time.Sleep(50 * time.Millisecond)
+			fmt.Println("fast done")
+		}
+		branch "slow" {
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("slow done")
+		}
+	}
+	elapsed := time.Since(start)
+	// Both should complete in ~100ms (parallel), not ~150ms (sequential)
+	if elapsed < 140*time.Millisecond {
+		fmt.Println("parallel: ran concurrently")
+	} else {
+		fmt.Println("parallel: ran sequentially (too slow)")
+	}
+
+	// --- race: first branch wins ---
+	fmt.Println("=== race ===")
+	winner := race {
+		branch "quick" {
+			time.Sleep(30 * time.Millisecond)
+			return "quick wins"
+		}
+		branch "delayed" {
+			time.Sleep(200 * time.Millisecond)
+			return "delayed wins"
+		}
+	}
+	fmt.Println("winner:", winner)
+
+	// --- timeout: with fallback ---
+	fmt.Println("=== timeout ===")
+	timeout 50ms {
+		time.Sleep(200 * time.Millisecond)
+		fmt.Println("should not print")
+	} on_timeout {
+		fmt.Println("timed out (expected)")
+	}
+}

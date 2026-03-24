@@ -1,0 +1,42 @@
+package main
+
+import "fmt"
+
+// --- Sum types ---
+
+type Result = Success{value string} | Failure{err string}
+
+// --- Pipeline operator ---
+
+func double(x int) int    { return x * 2 }
+func addTen(x int) int    { return x + 10 }
+func toString(x int) string { return fmt.Sprintf("%d", x) }
+
+// --- Using all three together ---
+
+func process(input int) Result {
+	// Pipeline: 5 |> double |> addTen → addTen(double(5)) = 20
+	value := input |> double |> addTen |> toString
+	if input < 0 {
+		return Failure{err: "negative not allowed"}
+	}
+	return Success{value: value}
+}
+
+func describe(r Result) string {
+	match r {
+	case Success{value}:
+		return "OK: " + value
+	case Failure{err}:
+		return "ERR: " + err
+	}
+	return "unknown"
+}
+
+func main() {
+	r := process(5)
+	fmt.Println(describe(r))
+
+	r2 := process(-1)
+	fmt.Println(describe(r2))
+}

@@ -79,6 +79,27 @@ func main() {
 			fatal("%v", err)
 		}
 
+	case "check":
+		if len(args) == 0 {
+			fatal("check requires at least one .tg file")
+		}
+		hasErrors := false
+		for _, f := range args {
+			src, err := os.ReadFile(f)
+			if err != nil {
+				fatal("%v", err)
+			}
+			report := preprocess.CheckAndReport(string(src), f)
+			if report != "" {
+				fmt.Fprint(os.Stderr, report)
+				hasErrors = true
+			}
+		}
+		if hasErrors {
+			os.Exit(1)
+		}
+		fmt.Println("No effect errors found.")
+
 	case "version":
 		fmt.Println("gotype v0.1.0-dev")
 

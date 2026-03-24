@@ -1,0 +1,64 @@
+package main
+
+import "fmt"
+
+// --- Sum type: Option<T> (monomorphized per type) ---
+
+type Option<int> = Some<int>{value int} | None<int>{}
+type Option<string> = Some<string>{value string} | None<string>{}
+
+// --- Typeclass: Functor ---
+
+typeclass Functor<F> {
+	fmap<A, B>(fn func(A) B, fa F<A>) F<B>
+}
+
+// --- Impl: Functor<Option> for int→string ---
+
+impl Functor<Option> {
+	fmapIntToString<int, string>(fn func(int) string, fa Option<int>) Option<string> {
+		switch __m := (fa).(type) {
+		case Some<int>:
+			return Some<string>{value: fn(__m.value)}
+		case None<int>:
+			return None<string>{}
+		}
+		return None<string>{}
+	}
+}
+
+// --- Effect + HKT usage ---
+
+effect GetValue(int)
+
+func doubleAndFormat(x int) string {
+	return fmt.Sprintf("doubled: %d", x*2)
+}
+
+func main() {
+	// Use the Functor impl
+	opt := Some<int>{value: 42}
+	mapped := fmapOption(doubleAndFormat, opt)
+
+	match mapped {
+	case Some<string>{value}:
+		fmt.Println(value)
+	case None<string>:
+		fmt.Println("none")
+	}
+
+	// Use with effects
+	handle {
+		val := perform GetValue.(int)
+		result := fmapOption(doubleAndFormat, Some<int>{value: val})
+		match result {
+		case Some<string>{value}:
+			fmt.Println(value)
+		case None<string>:
+			fmt.Println("none")
+		}
+	} with {
+	case GetValue:
+		resume(21)
+	}
+}

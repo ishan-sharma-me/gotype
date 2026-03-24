@@ -11,7 +11,8 @@ install: build
 	@mkdir -p $(BIN_DIR)
 	@cp gotype $(BIN_DIR)/gotype
 	@cp gotype-lsp $(BIN_DIR)/gotype-lsp
-	@echo "Installed gotype and gotype-lsp to $(BIN_DIR)/"
+	@cp gotyped $(BIN_DIR)/gotyped
+	@echo "Installed gotype, gotype-lsp, gotyped to $(BIN_DIR)/"
 	@if ! grep -qF '.gotype/bin' $(SHELL_RC) 2>/dev/null; then \
 		echo '' >> $(SHELL_RC); \
 		echo '# gotype' >> $(SHELL_RC); \
@@ -25,9 +26,10 @@ install: build
 build:
 	@go build -o gotype ./cmd/gotype/
 	@go build -o gotype-lsp ./cmd/gotype-lsp/
+	@go build -o gotyped ./cmd/gotyped/
 
 clean:
-	@rm -f gotype gotype-lsp
+	@rm -f gotype gotype-lsp gotyped
 
 test:
 	@go test ./...
@@ -49,5 +51,5 @@ install-lsp: install
 	@echo "GoType extension installed. Restart VS Code to activate."
 
 uninstall:
-	@rm -f $(BIN_DIR)/gotype $(BIN_DIR)/gotype-lsp
-	@echo "Removed gotype and gotype-lsp from $(BIN_DIR)"
+	@rm -f $(BIN_DIR)/gotype $(BIN_DIR)/gotype-lsp $(BIN_DIR)/gotyped
+	@echo "Removed gotype, gotype-lsp, gotyped from $(BIN_DIR)"

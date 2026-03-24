@@ -1,0 +1,160 @@
+package main
+
+import "fmt"
+
+// --- Standard AI agent effects ---
+
+effect LLM(prompt string) string
+effect Tools(name string, args string) string
+effect Memory(key string) string
+effect Budget(tokens int) bool
+effect Trace(event string)
+
+// --- Agent: a function that performs effects ---
+
+func classifyTicket(ticket string) string {
+	perform Trace("classifying: " + ticket)
+	allowed := perform Budget(100)
+	if !allowed.(bool) {
+		return "over_budget"
+	}
+	category := perform LLM("Classify this ticket: " + ticket)
+	perform Trace("classified as: " + category.(string))
+	return category.(string)
+}
+
+func enrichTicket(ticket string) string {
+	category := classifyTicket(ticket)
+	history := perform Memory(ticket)
+	result := perform LLM("Enrich ticket. Category: " + category + " History: " + history.(string))
+	return result.(string)
+}
+
+// --- Multi-agent: delegate to sub-agents ---
+
+effect Delegate(agent string, task string) string
+
+func orchestrate(goal string) string {
+	perform Trace("orchestrating: " + goal)
+	plan := perform LLM("Break this into tasks: " + goal)
+
+	// Run sub-agents in parallel
+	parallel {
+		branch "classify" {
+			classifyTicket(goal)
+		}
+		branch "enrich" {
+			enrichTicket(goal)
+		}
+	}
+
+	summary := perform LLM("Summarize results for: " + plan.(string))
+	return summary.(string)
+}
+
+func main() {
+	tokenBudget := 1000
+
+	handle {
+		result := orchestrate("fix login bug")
+		fmt.Println("Result:", result)
+	} with {
+	case LLM(prompt string):
+		fmt.Println("[LLM]", prompt)
+		resume("mock_response")
+	case Tools(name string, args string):
+		fmt.Println("[TOOL]", name, args)
+		resume("tool_result")
+	case Memory(key string):
+		fmt.Println("[MEM]", key)
+		resume("cached_data")
+	case Budget(tokens int):
+		tokenBudget -= tokens
+		if tokenBudget < 0 {
+			fmt.Println("[BUDGET] exceeded")
+			resume(false)
+		} else {
+			fmt.Printf("[BUDGET] %d remaining\n", tokenBudget)
+			resume(true)
+		}
+	case Trace(event string):
+		fmt.Println("[TRACE]", event)
+		resume()
+	}
+}
+
+// --- Tests: effects make agents trivially testable ---
+
+test "classifyTicket respects budget" {
+	handle {
+		result := classifyTicket("test ticket")
+		assert result == "over_budget"
+	} with {
+	case Budget(tokens int):
+		resume(false)
+	case Trace(event string):
+		resume()
+	case LLM(prompt string):
+		resume("should not reach")
+	}
+}
+
+test "classifyTicket calls LLM when budget allows" {
+	var llmCalled bool
+	handle {
+		result := classifyTicket("test ticket")
+		assert result == "bug_report"
+		assert llmCalled
+	} with {
+	case Budget(tokens int):
+		resume(true)
+	case Trace(event string):
+		resume()
+	case LLM(prompt string):
+		llmCalled = true
+		resume("bug_report")
+	}
+}
+
+test "enrichTicket chains classifyTicket and memory" {
+	handle {
+		result := enrichTicket("login issue")
+		assert result == "enriched_result"
+	} with {
+	case Budget(tokens int):
+		resume(true)
+	case Trace(event string):
+		resume()
+	case LLM(prompt string):
+		resume("enriched_result")
+	case Memory(key string):
+		resume("historical_data")
+	}
+}
+
+// --- Reconciliation: agent health monitoring ---
+
+reconcile LLM {
+	interval: 5m
+	invariant "accuracy" {
+		assert accuracy > 0.85
+	}
+	invariant "cost_per_call" {
+		assert cost_per_call < 0.02
+	}
+	sla "latency" {
+		p99 < 3s
+		p50 < 800ms
+	}
+	on_drift "accuracy" {
+		action: alert("ml-oncall")
+		action: fallback(classifyTicket, ruleBasedClassifier)
+	}
+}
+
+reconcile Budget {
+	interval: 1m
+	invariant "not_exceeded" {
+		assert total_spend < daily_limit
+	}
+}

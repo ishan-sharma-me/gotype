@@ -33,7 +33,11 @@ func ProcessFile(filename string) (*File, error) {
 // ProcessSource preprocesses .tg source and parses it as Go.
 // Effect and test syntax is transformed into valid Go before parsing.
 func ProcessSource(filename string, src []byte) (*File, error) {
-	transformed := TransformEffects(string(src))
+	transformed := StripReconcileBlocks(string(src))
+	transformed = TransformTypeSystem(transformed)
+	transformed = TransformSugar(transformed)
+	transformed = TransformConcurrency(transformed)
+	transformed = TransformEffects(transformed)
 	transformed = TransformTests(transformed)
 
 	fset := token.NewFileSet()

@@ -1,0 +1,307 @@
+// GoType Cookbook — real-world patterns for AI code generation.
+// Each section is a self-contained, runnable .tg program.
+
+// ============================================================
+// PATTERN 1: Dependency injection via effects
+// The function doesn't know WHERE data comes from. The handler decides.
+// ============================================================
+
+package main
+
+import "fmt"
+
+effect GetUser(id string) string
+effect SaveUser(id string, name string)
+
+func renameUser(id string, newName string) {
+	oldName := perform GetUser(id).(string)
+	fmt.Printf("Renaming %s to %s\n", oldName, newName)
+	perform SaveUser(id, newName)
+}
+
+func main() {
+	// In production: handler talks to a real database
+	// In tests: handler returns mock data
+	handle {
+		renameUser("user_1", "New Name")
+	} with {
+	case GetUser(id string):
+		resume("Old Name")
+	case SaveUser(id string, name string):
+		fmt.Printf("Saved: %s = %s\n", id, name)
+		resume()
+	}
+}
+
+// ============================================================
+// PATTERN 2: Error handling without exceptions
+// Use sum types for explicit, type-safe error handling.
+// ============================================================
+
+/*
+type ApiResult = ApiOk{data string} | ApiErr{code int, msg string}
+
+func callApi(url string) ApiResult {
+	// In real code, this would perform an HTTP effect
+	if url == "" {
+		return ApiErr{code: 400, msg: "empty url"}
+	}
+	return ApiOk{data: "response from " + url}
+}
+
+func processResponse(r ApiResult) string {
+	match r {
+	case ApiOk{data}:
+		return "Got: " + data
+	case ApiErr{code, msg}:
+		return fmt.Sprintf("Error %d: %s", code, msg)
+	}
+	return ""
+}
+*/
+
+// ============================================================
+// PATTERN 3: Testing with effects — zero mocking libraries
+// The handler IS the mock, the stub, and the spy all in one.
+// ============================================================
+
+/*
+effect DB(query string) string
+effect Email(to string, body string)
+
+func onboardUser(name string, email string) string {
+	perform DB("INSERT INTO users (name) VALUES ('" + name + "')")
+	perform Email(email, "Welcome, " + name + "!")
+	return "onboarded: " + name
+}
+
+test "onboardUser sends welcome email" {
+	var sentTo string
+	handle {
+		result := onboardUser("Alice", "alice@test.com")
+		assert result == "onboarded: Alice"
+		assert sentTo == "alice@test.com"
+	} with {
+	case DB(query string):
+		resume("ok")
+	case Email(to string, body string):
+		sentTo = to
+		resume()
+	}
+}
+
+test "onboardUser inserts into database" {
+	var queries []string
+	handle {
+		onboardUser("Bob", "bob@test.com")
+		assert len(queries) == 1
+	} with {
+	case DB(query string):
+		queries = append(queries, query)
+		resume("ok")
+	case Email(to string, body string):
+		resume()
+	}
+}
+*/
+
+// ============================================================
+// PATTERN 4: Pipeline data processing
+// Clean left-to-right data transformation.
+// ============================================================
+
+/*
+func double(x int) int    { return x * 2 }
+func addTen(x int) int    { return x + 10 }
+func clamp(x int, max int) int {
+	if x > max { return max }
+	return x
+}
+
+func process(input int) int {
+	return input |> double |> addTen |> clamp(100)
+}
+// process(30) → clamp(addTen(double(30)), 100) → clamp(70, 100) → 70
+// process(60) → clamp(addTen(double(60)), 100) → clamp(130, 100) → 100
+*/
+
+// ============================================================
+// PATTERN 5: Structured concurrency — fan-out/fan-in
+// Run multiple operations in parallel, collect all results.
+// ============================================================
+
+/*
+effect Fetch(url string) string
+
+func fetchAll(urls []string) {
+	parallel {
+		branch "fetch_1" {
+			perform Fetch(urls[0])
+		}
+		branch "fetch_2" {
+			perform Fetch(urls[1])
+		}
+	}
+}
+*/
+
+// ============================================================
+// PATTERN 6: Race — first response wins (cache vs DB)
+// ============================================================
+
+/*
+effect CacheGet(key string) string
+effect DBQuery(key string) string
+
+func getData(key string) string {
+	result := race {
+		branch "cache" {
+			return perform CacheGet(key).(string)
+		}
+		branch "db" {
+			return perform DBQuery(key).(string)
+		}
+	}
+	return result.(string)
+}
+*/
+
+// ============================================================
+// PATTERN 7: Timeout with graceful fallback
+// ============================================================
+
+/*
+effect SlowApi(query string) string
+
+func queryWithFallback(q string) string {
+	var result string
+	timeout 2s {
+		result = perform SlowApi(q).(string)
+	} on_timeout {
+		result = "default_value"
+	}
+	return result
+}
+*/
+
+// ============================================================
+// PATTERN 8: AI agent with budget control
+// Effects make every external call observable and controllable.
+// ============================================================
+
+/*
+effect LLM(prompt string) string
+effect Budget(tokens int) bool
+effect Trace(event string)
+
+func agent(task string) string {
+	perform Trace("starting: " + task)
+
+	allowed := perform Budget(500)
+	if !allowed.(bool) {
+		return "budget_exceeded"
+	}
+
+	result := perform LLM("Complete this task: " + task)
+	perform Trace("completed: " + result.(string))
+	return result.(string)
+}
+
+test "agent respects budget limits" {
+	handle {
+		result := agent("test task")
+		assert result == "budget_exceeded"
+	} with {
+	case Budget(tokens int):
+		resume(false)
+	case Trace(event string):
+		resume()
+	case LLM(prompt string):
+		resume("should not reach")
+	}
+}
+*/
+
+// ============================================================
+// PATTERN 9: Reconciliation — production monitoring
+// Same test assertions run in dev AND prod.
+// ============================================================
+
+/*
+reconcile PaymentGateway {
+	interval: 30s
+	invariant "reachable" {
+		assert ping() == nil
+	}
+	sla "latency" {
+		p99 < 2s
+	}
+	on_drift "reachable" {
+		action: alert("payments-oncall")
+		action: pause(PaymentGateway)
+	}
+}
+*/
+
+// ============================================================
+// PATTERN 10: Composing effects — real-world service
+// Multiple effects compose naturally. The handler wires everything.
+// ============================================================
+
+/*
+effect Auth(token string) string
+effect DB(query string) string
+effect Cache(key string) string
+effect Metrics(name string, value float64)
+
+func getProfile(token string) string {
+	userId := perform Auth(token).(string)
+
+	// Try cache first
+	cached := perform Cache("profile:" + userId).(string)
+	if cached != "" {
+		perform Metrics("cache_hit", 1)
+		return cached
+	}
+
+	// Cache miss — hit DB
+	perform Metrics("cache_miss", 1)
+	profile := perform DB("SELECT * FROM profiles WHERE id = " + userId).(string)
+	return profile
+}
+
+test "getProfile uses cache when available" {
+	handle {
+		result := getProfile("valid_token")
+		assert result == "cached_profile"
+	} with {
+	case Auth(token string):
+		resume("user_123")
+	case Cache(key string):
+		resume("cached_profile")
+	case DB(query string):
+		resume("should not reach DB")
+	case Metrics(name string, value float64):
+		resume()
+	}
+}
+
+test "getProfile falls back to DB on cache miss" {
+	var dbCalled bool
+	handle {
+		result := getProfile("valid_token")
+		assert result == "db_profile"
+		assert dbCalled
+	} with {
+	case Auth(token string):
+		resume("user_123")
+	case Cache(key string):
+		resume("")  // cache miss
+	case DB(query string):
+		dbCalled = true
+		resume("db_profile")
+	case Metrics(name string, value float64):
+		resume()
+	}
+}
+*/

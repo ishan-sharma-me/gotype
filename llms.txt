@@ -1,0 +1,802 @@
+# GoType Language Reference (for AI/LLM consumption)
+# This file describes the .tg language — a strict superset of Go with algebraic effects,
+# sum types, pattern matching, pipeline operators, structured concurrency, and HKTs.
+# Every valid .go file is a valid .tg file. The gotype transpiler converts .tg → .go.
+
+## Quick Start
+
+```
+# Install
+make install
+
+# Run a .tg file
+gotype run file.tg
+
+# Transpile to Go
+gotype transpile file.tg -o output/
+
+# Run tests
+gotype test file.tg
+
+# Check for effect errors
+gotype check file.tg
+
+# Show module dependency graph
+gotype graph file.tg
+```
+
+## Core Concept: Algebraic Effects
+
+Effects are resumable exceptions. `perform` raises an effect and suspends. `handle/with` catches
+it and `resume()` sends a value back to the perform site. This separates WHAT code does from HOW
+it's done — enabling dependency injection, testability, and composability with zero boilerplate.
+
+---
+
+## 1. Effect Declaration
+
+Declares a named effect with optional parameters and return type.
+
+### Syntax
+```
+effect EffectName(returnType)
+effect EffectName(param1 type1, param2 type2) returnType
+effect EffectName(param1 type1)
+```
+
+### Rules
+- Effect names MUST start with uppercase (PascalCase)
+- Effects are metadata — they're stripped from the Go output
+- Effects are single operations (not containers)
+
+### Examples
+```go
+effect AskName(string)                    // returns string, no params
+effect Log(msg string)                    // takes msg, returns nothing
+effect Charge(id string, amount int) bool // takes two params, returns bool
+effect GetUser(id string) User            // returns a struct
+effect Shutdown()                         // no params, no return
+```
+
+---
+
+## 2. Perform
+
+Raises an effect. Execution suspends until a handler calls `resume()`.
+
+### Syntax
+```
+perform EffectName
+perform EffectName.(Type)
+perform EffectName(args...)
+perform EffectName(args...).(Type)
+```
+
+### Rules
+- `perform` returns `any` — use `.(Type)` to type-assert the result
+- Can be used anywhere an expression is valid: assignments, arguments, returns
+- The effect bubbles up through the call stack until a `handle/with` catches it
+- If no handler is found, the program panics
+
+### Examples
+```go
+// Basic perform — returns any
+name := perform AskName
+
+// With type assertion
+name := perform AskName.(string)
+
+// With arguments
+perform Log("hello world")
+
+// With arguments and type assertion
+receipt := perform Charge("cust_1", 5000).(bool)
+
+// In a return statement
+func getName() string {
+    return perform AskName.(string)
+}
+
+// In a function argument
+fmt.Println(perform AskName.(string))
+```
+
+---
+
+## 3. Handle / With
+
+Catches effects and provides handlers. This is the core construct for dependency injection.
+
+### Syntax
+```
+handle {
+    // code that may perform effects
+} with {
+case EffectName:
+    // handler body — call resume() to continue
+case EffectName(param1 type1, param2 type2):
+    // handler with access to perform arguments
+}
+```
+
+### Rules
+- `handle/with` creates a goroutine for the body and an event loop for handlers
+- Each `case` matches an effect name
+- `resume(value)` sends the value back to the `perform` site
+- `resume()` resumes with nil (for void effects)
+- If `resume()` is not called, the computation is abandoned
+- Multiple effects can be handled in one block
+- Handlers nest — inner handlers shadow outer ones for the same effect
+
+### Examples
+```go
+// Basic handle/with
+handle {
+    name := perform AskName.(string)
+    fmt.Println("Hello,", name)
+} with {
+case AskName:
+    resume("Alice")
+}
+
+// Handler with parameters
+handle {
+    perform Log("starting")
+    perform Log("done")
+} with {
+case Log(msg string):
+    fmt.Println("[LOG]", msg)
+    resume()
+}
+
+// Multiple effects in one block
+handle {
+    name := perform AskName.(string)
+    perform Log("got name: " + name)
+} with {
+case AskName:
+    resume("Bob")
+case Log(msg string):
+    fmt.Println(msg)
+    resume()
+}
+
+// Nested handlers (inner shadows outer)
+handle {
+    handle {
+        name := perform AskName.(string)  // → "Inner"
+    } with {
+    case AskName:
+        resume("Inner")
+    }
+    name := perform AskName.(string)      // → "Outer"
+} with {
+case AskName:
+    resume("Outer")
+}
+
+// Stateful handler
+callCount := 0
+handle {
+    a := perform AskName.(string)  // → "first"
+    b := perform AskName.(string)  // → "second"
+} with {
+case AskName:
+    callCount++
+    if callCount == 1 {
+        resume("first")
+    } else {
+        resume("second")
+    }
+}
+
+// Non-resuming handler (abandons the computation)
+handle {
+    perform Abort
+    fmt.Println("this never executes")
+} with {
+case Abort:
+    // don't call resume — computation is abandoned
+}
+```
+
+---
+
+## 4. Test Blocks
+
+First-class test syntax. Tests are transpiled to Go test functions.
+
+### Syntax
+```
+test "description" {
+    // test body — can use handle/with, perform, assert
+}
+```
+
+### Rules
+- `test` blocks become `func TestDescription(t *testing.T)`
+- The `testing` import is auto-added
+- Use `assert expr` for assertions
+- Effects inside tests are handled with `handle/with` — the handler IS the mock
+
+### Examples
+```go
+test "getName returns prompted name" {
+    handle {
+        result := getName()
+        assert result == "Alice"
+    } with {
+    case AskName:
+        resume("Alice")
+    }
+}
+
+test "budget is respected" {
+    handle {
+        result := processPayment("order_1")
+        assert result == "over_budget"
+    } with {
+    case Budget(tokens int):
+        resume(false)  // simulate exceeded budget
+    case Trace(event string):
+        resume()
+    }
+}
+
+test "multiple performs in sequence" {
+    count := 0
+    handle {
+        a := perform AskName.(string)
+        b := perform AskName.(string)
+        assert a == "first"
+        assert b == "second"
+    } with {
+    case AskName:
+        count++
+        if count == 1 {
+            resume("first")
+        } else {
+            resume("second")
+        }
+    }
+}
+```
+
+---
+
+## 5. Assert
+
+Assertion inside test blocks.
+
+### Syntax
+```
+assert expression
+```
+
+### Rules
+- Only valid inside `test` blocks
+- Transpiles to `if !(expr) { t.Fatalf("assert failed: expr") }`
+
+### Examples
+```go
+assert x == 42
+assert len(items) > 0
+assert result == "expected"
+assert err == nil
+```
+
+---
+
+## 6. Sum Types
+
+Tagged unions / discriminated unions. Each variant is a separate type implementing a sealed interface.
+
+### Syntax
+```
+type TypeName = Variant1{field1 type1, field2 type2} | Variant2{field1 type1} | Variant3
+```
+
+### Rules
+- Creates an interface `TypeName` with a private seal method
+- Each variant becomes a Go struct implementing the interface
+- Variants can have fields (named, typed) or be empty
+- Field names are used as-is in struct literals
+- Use `match` for exhaustive pattern matching
+
+### Examples
+```go
+// With fields
+type Result = Success{value string} | Failure{err string}
+
+// Usage
+r := Success{value: "hello"}
+r2 := Failure{err: "something went wrong"}
+
+// Empty variants (enum-like)
+type Color = Red | Green | Blue
+
+c := Red{}
+
+// Mixed
+type Shape = Circle{radius float64} | Rectangle{width float64, height float64} | Point
+```
+
+### Generated Go
+```go
+// type Result = Success{value string} | Failure{err string}
+// generates:
+type Result interface { __isResult() }
+type Success struct { value string }
+func (Success) __isResult() {}
+type Failure struct { err string }
+func (Failure) __isResult() {}
+```
+
+---
+
+## 7. Pattern Matching
+
+Type switch with field bindings for sum types.
+
+### Syntax
+```
+match expression {
+case VariantName{binding1, binding2}:
+    // body — binding1 and binding2 are in scope
+case VariantName:
+    // body — no bindings
+}
+```
+
+### Rules
+- Transpiles to Go type switch
+- Bindings are extracted from the matched struct's fields
+- Binding names must match the field names declared in the sum type
+
+### Examples
+```go
+type Result = Success{value string} | Failure{err string}
+
+func describe(r Result) string {
+    match r {
+    case Success{value}:
+        return "OK: " + value
+    case Failure{err}:
+        return "ERR: " + err
+    }
+    return "unknown"
+}
+
+// Enum matching (no bindings)
+type Color = Red | Green | Blue
+
+func name(c Color) string {
+    match c {
+    case Red:
+        return "red"
+    case Green:
+        return "green"
+    case Blue:
+        return "blue"
+    }
+    return ""
+}
+```
+
+### Generated Go
+```go
+// match r { case Success{value}: ... }
+// generates:
+switch __m := (r).(type) {
+case Success:
+    value := __m.value
+    return "OK: " + value
+case Failure:
+    err := __m.err
+    return "ERR: " + err
+}
+```
+
+---
+
+## 8. Pipeline Operator
+
+Left-to-right function composition.
+
+### Syntax
+```
+expr |> func1 |> func2 |> func3(extraArgs)
+```
+
+### Rules
+- `x |> f` becomes `f(x)`
+- `x |> f(extra)` becomes `f(x, extra)` — piped value is first argument
+- Chains any number of stages
+- Works with any function
+
+### Examples
+```go
+// Simple chain
+result := 5 |> double |> addTen |> toString
+// → toString(addTen(double(5)))
+
+// With extra arguments
+result := data |> transform |> save("database")
+// → save(transform(data), "database")
+
+// With method-like functions
+users |> filter(isActive) |> sortBy("name") |> take(10)
+// → take(sortBy(filter(users, isActive), "name"), 10)
+```
+
+---
+
+## 9. Structured Concurrency
+
+### 9a. Parallel
+
+Run branches concurrently, wait for all to complete.
+
+```
+parallel {
+    branch "name1" {
+        // runs in goroutine
+    }
+    branch "name2" {
+        // runs in goroutine
+    }
+}
+// execution continues after ALL branches complete
+```
+
+### 9b. Race
+
+Run branches concurrently, first to complete wins.
+
+```
+winner := race {
+    branch "fast" {
+        return computeFast()
+    }
+    branch "slow" {
+        return computeSlow()
+    }
+}
+// winner has the value from whichever branch finished first
+```
+
+### 9c. Timeout
+
+Run with a deadline, with fallback on timeout.
+
+```
+timeout 5s {
+    slowOperation()
+} on_timeout {
+    fmt.Println("timed out")
+}
+```
+
+### Duration formats
+- `100ms` — milliseconds
+- `5s` — seconds
+- `2m` — minutes
+- `1h` — hours
+
+### Examples
+```go
+// Parallel: fetch data from multiple sources
+parallel {
+    branch "users" {
+        users = fetchUsers()
+    }
+    branch "orders" {
+        orders = fetchOrders()
+    }
+}
+fmt.Println(len(users), len(orders))
+
+// Race: cache vs database
+result := race {
+    branch "cache" {
+        return perform CacheGet("key").(string)
+    }
+    branch "db" {
+        return perform DBQuery("key").(string)
+    }
+}
+
+// Timeout with fallback
+timeout 2s {
+    result = perform SlowAPI("query").(string)
+} on_timeout {
+    result = "default_value"
+}
+```
+
+---
+
+## 10. Type Classes (HKTs)
+
+Higher-kinded type abstractions via monomorphization.
+
+### Syntax
+```
+typeclass ClassName<TypeParam> {
+    methodName<A, B>(params) ReturnType
+}
+
+impl ClassName<ConcreteType> {
+    methodName<A, B>(params) ReturnType {
+        // implementation
+    }
+}
+```
+
+### Type Instantiation
+```
+Type<Arg>        → TypeArg (monomorphized)
+Option<int>      → OptionInt
+Result<string>   → ResultString
+```
+
+### Rules
+- Typeclasses define abstract interfaces over type constructors
+- Impls provide concrete implementations for specific types
+- All generics are monomorphized at transpile time (no runtime overhead)
+- Type instantiation `Type<Arg>` is rewritten to `TypeArg` everywhere
+
+### Examples
+```go
+// Define Option for specific types
+type Option<int> = Some<int>{value int} | None<int>{}
+type Option<string> = Some<string>{value string} | None<string>{}
+
+// Typeclass
+typeclass Functor<F> {
+    fmap<A, B>(fn func(A) B, fa F<A>) F<B>
+}
+
+// Implement Functor for Option (int → string)
+impl Functor<Option> {
+    fmapIntToString<int, string>(fn func(int) string, fa Option<int>) Option<string> {
+        switch __m := (fa).(type) {
+        case Some<int>:
+            return Some<string>{value: fn(__m.value)}
+        case None<int>:
+            return None<string>{}
+        }
+        return None<string>{}
+    }
+}
+
+// Usage
+opt := Some<int>{value: 42}
+result := fmapOption(toString, opt)  // fmapOption is auto-generated alias
+```
+
+---
+
+## 11. Reconciliation (Ananke)
+
+Continuous contract verification for production. Same effect graph that drives
+test cascading in dev drives reconciliation in prod.
+
+### Syntax
+```
+reconcile EffectName {
+    interval: duration
+    invariant "name" {
+        assert condition
+    }
+    sla "name" {
+        metric < threshold
+    }
+    on_drift "invariant_name" {
+        action: actionExpr
+    }
+}
+```
+
+### Rules
+- Reconcile blocks are metadata — stripped from transpiled output
+- The daemon reads them and runs checks on schedule
+- `interval` sets how often invariants are checked
+- `on_drift` actions execute when invariants fail
+- Failure cascades through the module dependency graph
+
+### Examples
+```go
+reconcile PaymentGateway {
+    interval: 30s
+    invariant "gateway_reachable" {
+        assert gateway.ping() == nil
+    }
+    invariant "ledger_consistency" {
+        assert abs(gateway.balance - ledger.sum) < 100
+    }
+    sla "charge_latency" {
+        p99 < 2s
+        error_rate < 0.01
+    }
+    on_drift "ledger_consistency" {
+        action: alert("payments-oncall")
+        action: pause(PaymentGateway)
+    }
+}
+```
+
+### CLI
+```
+gotyped start --mode=prod path/     # Run reconciliation on schedule
+gotyped reconcile path/             # Show reconciliation status
+gotyped simulate --fail Effect      # Simulate failure + cascade
+gotyped simulate --drift Effect.inv # Simulate invariant violation
+```
+
+---
+
+## 12. Effect Checking
+
+Static analysis for effect correctness.
+
+### What it checks
+- Every `perform` names a declared effect
+- Every performed effect has a `handle/with` handler somewhere
+- Reports: undeclared effects, unhandled effects
+
+### CLI
+```
+gotype check file.tg
+```
+
+### Examples
+```
+# This file has an unhandled effect:
+$ gotype check bad.tg
+bad.tg: 1 effect error(s):
+  - unhandled effect: AskName (performed but no handler found)
+
+# This file is correct:
+$ gotype check good.tg
+No effect errors found.
+```
+
+---
+
+## 13. Complete Example: AI Agent
+
+This example shows effects, testing, reconciliation, and structured concurrency working together.
+
+```go
+package main
+
+import "fmt"
+
+// --- Effects: every external dependency is an effect ---
+effect LLM(prompt string) string
+effect Tools(name string, args string) string
+effect Memory(key string) string
+effect Budget(tokens int) bool
+effect Trace(event string)
+
+// --- Agent: just a function that performs effects ---
+func classifyTicket(ticket string) string {
+    perform Trace("classifying: " + ticket)
+    allowed := perform Budget(100)
+    if !allowed.(bool) {
+        return "over_budget"
+    }
+    category := perform LLM("Classify: " + ticket)
+    return category.(string)
+}
+
+func enrichTicket(ticket string) string {
+    category := classifyTicket(ticket)
+    history := perform Memory(ticket)
+    result := perform LLM("Enrich. Category: " + category + " History: " + history.(string))
+    return result.(string)
+}
+
+// --- Main: wire effects to real implementations ---
+func main() {
+    tokenBudget := 1000
+    handle {
+        result := enrichTicket("login bug")
+        fmt.Println("Result:", result)
+    } with {
+    case LLM(prompt string):
+        fmt.Println("[LLM]", prompt)
+        resume("ai_response")
+    case Memory(key string):
+        resume("cached_data")
+    case Budget(tokens int):
+        tokenBudget -= tokens
+        resume(tokenBudget >= 0)
+    case Trace(event string):
+        fmt.Println("[TRACE]", event)
+        resume()
+    }
+}
+
+// --- Tests: handler IS the mock, no mock libraries needed ---
+test "classifyTicket respects budget" {
+    handle {
+        result := classifyTicket("test")
+        assert result == "over_budget"
+    } with {
+    case Budget(tokens int):
+        resume(false)
+    case Trace(event string):
+        resume()
+    case LLM(prompt string):
+        resume("should not reach")
+    }
+}
+
+test "classifyTicket calls LLM when budget allows" {
+    var llmCalled bool
+    handle {
+        result := classifyTicket("test")
+        assert result == "bug_report"
+        assert llmCalled
+    } with {
+    case Budget(tokens int):
+        resume(true)
+    case Trace(event string):
+        resume()
+    case LLM(prompt string):
+        llmCalled = true
+        resume("bug_report")
+    }
+}
+
+// --- Reconciliation: continuous monitoring in prod ---
+reconcile LLM {
+    interval: 5m
+    invariant "accuracy" {
+        assert accuracy > 0.85
+    }
+    sla "latency" {
+        p99 < 3s
+    }
+    on_drift "accuracy" {
+        action: alert("ml-oncall")
+        action: fallback(classifyTicket, ruleBasedClassifier)
+    }
+}
+```
+
+---
+
+## Automatic Effect Wiring
+
+The transpiler automatically handles effect propagation:
+- Functions containing `perform` get a `__eff` channel parameter injected
+- Call sites to effectful functions get `__eff` argument injected
+- `handle/with` blocks create the `__eff` channel
+- The user never writes any plumbing — it's all automatic
+
+## Key Principle
+
+Every `.go` file is a valid `.tg` file. You can rename any Go file to `.tg` and it works.
+The transpiler only adds features — it never breaks existing Go code.
+
+## Tooling
+
+```
+gotype run file.tg              # transpile + run
+gotype transpile file.tg        # emit .go file
+gotype build file.tg            # transpile + go build
+gotype test file.tg             # run test blocks
+gotype check file.tg            # effect type checking
+gotype graph file.tg            # module dependency graph
+
+gotyped start path/             # dev mode: watch + cascade tests + SSE feed
+gotyped start --mode=prod path/ # prod mode: reconciliation on schedule
+gotyped status path/            # module health summary
+gotyped reconcile path/         # reconciliation status
+gotyped graph path/             # dependency graph
+gotyped simulate --fail Effect  # simulate failure cascade
+gotyped feed [addr]             # connect to SSE event stream
+```

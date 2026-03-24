@@ -1,0 +1,7 @@
+[submodule "testdata/go-spec"]
+	path = testdata/go-spec
+	url = https://github.com/golang/go.git
+	shallow = true
+[submodule "testdata/kubernetes"]
+	path = testdata/kubernetes
+	url = https://github.com/kubernetes/kubernetes.git

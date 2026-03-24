@@ -12,6 +12,7 @@ install: build
 	@cp gotype $(BIN_DIR)/gotype
 	@cp gotype-lsp $(BIN_DIR)/gotype-lsp
 	@cp gotyped $(BIN_DIR)/gotyped
+	@rm -f gotype gotype-lsp gotyped
 	@echo "Installed gotype, gotype-lsp, gotyped to $(BIN_DIR)/"
 	@if ! grep -qF '.gotype/bin' $(SHELL_RC) 2>/dev/null; then \
 		echo '' >> $(SHELL_RC); \

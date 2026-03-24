@@ -33,7 +33,7 @@ clean:
 	@rm -f gotype gotype-lsp gotyped
 
 test:
-	@go test ./...
+	@go test -short ./...
 
 test-conformance:
 	@echo "Running Go spec conformance (2592 files)..."

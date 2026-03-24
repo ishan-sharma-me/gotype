@@ -90,10 +90,11 @@ func TransformEffects(src string) string {
 var effectDeclRe = regexp.MustCompile(`(?m)^effect\s+[A-Z]`) // effect Name — effect names are capitalized
 
 func containsEffectSyntax(src string) bool {
-	if effectDeclRe.MatchString(src) {
+	stripped := stripComments(src)
+	if effectDeclRe.MatchString(stripped) {
 		return true
 	}
-	for _, line := range strings.Split(src, "\n") {
+	for _, line := range strings.Split(stripped, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "perform ") ||
 			strings.HasPrefix(trimmed, "handle {") ||

@@ -27,13 +27,9 @@ func TransformTests(src string) string {
 }
 
 func containsTestSyntax(src string) bool {
-	// Strip block comments before checking
-	stripped := stripBlockComments(src)
+	stripped := stripComments(src)
 	for _, line := range strings.Split(stripped, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "//") {
-			continue
-		}
 		if strings.HasPrefix(trimmed, "test ") && strings.Contains(trimmed, `"`) {
 			return true
 		}
@@ -41,26 +37,7 @@ func containsTestSyntax(src string) bool {
 	return false
 }
 
-func stripBlockComments(src string) string {
-	var out strings.Builder
-	i := 0
-	for i < len(src) {
-		if i+1 < len(src) && src[i] == '/' && src[i+1] == '*' {
-			i += 2
-			for i+1 < len(src) {
-				if src[i] == '*' && src[i+1] == '/' {
-					i += 2
-					break
-				}
-				i++
-			}
-			continue
-		}
-		out.WriteByte(src[i])
-		i++
-	}
-	return out.String()
-}
+// stripBlockComments and stripLineComments are in scanner.go
 
 func ensureTestingImport(src string) string {
 	if strings.Contains(src, `"testing"`) {

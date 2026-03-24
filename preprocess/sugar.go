@@ -26,9 +26,10 @@ func TransformSugar(src string) string {
 }
 
 func containsSugarSyntax(src string) bool {
-	return strings.Contains(src, "|>") ||
-		containsSumTypeDecl(src) ||
-		containsMatchExpr(src)
+	stripped := stripComments(src)
+	return strings.Contains(stripped, "|>") ||
+		containsSumTypeDecl(stripped) ||
+		containsMatchExpr(stripped)
 }
 
 // --- Pipeline operator ---

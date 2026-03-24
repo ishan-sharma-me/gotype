@@ -230,6 +230,37 @@ func (s *scanner) findMatchingBrace(pos int) int {
 	return -1
 }
 
+// stripComments removes both block comments (/* */) and line comments (//) from source.
+// Used by contains* functions to avoid false positives from commented-out code.
+func stripComments(src string) string {
+	var out strings.Builder
+	i := 0
+	for i < len(src) {
+		if i+1 < len(src) && src[i] == '/' && src[i+1] == '*' {
+			// Block comment
+			i += 2
+			for i+1 < len(src) {
+				if src[i] == '*' && src[i+1] == '/' {
+					i += 2
+					break
+				}
+				i++
+			}
+			continue
+		}
+		if i+1 < len(src) && src[i] == '/' && src[i+1] == '/' {
+			// Line comment — skip to end of line
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		out.WriteByte(src[i])
+		i++
+	}
+	return out.String()
+}
+
 // extractBraceContent extracts the content between { and }, starting at a position
 // where src[pos] == '{'. Returns the inner content and the position after '}'.
 func extractBraceContent(src string, pos int) (string, int) {

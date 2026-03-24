@@ -80,7 +80,8 @@ func TransformConcurrency(src string) string {
 }
 
 func containsConcurrencySyntax(src string) bool {
-	for _, line := range strings.Split(src, "\n") {
+	stripped := stripComments(src)
+	for _, line := range strings.Split(stripped, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "parallel {") ||
 			strings.HasPrefix(trimmed, "parallel\t{") ||
@@ -94,11 +95,12 @@ func containsConcurrencySyntax(src string) bool {
 }
 
 func ensureSyncImport(src string) string {
-	// Only add imports for constructs that are actually present as statements
+	// Only add imports for constructs that are actually present as statements (not in comments)
+	stripped := stripComments(src)
 	hasParallel := false
 	hasRace := false
 	hasTimeout := false
-	for _, line := range strings.Split(src, "\n") {
+	for _, line := range strings.Split(stripped, "\n") {
 		t := strings.TrimSpace(line)
 		if strings.HasPrefix(t, "parallel {") || strings.HasPrefix(t, "parallel\t{") {
 			hasParallel = true

@@ -25,9 +25,10 @@ func TransformTypeSystem(src string) string {
 }
 
 func containsTypeSystemSyntax(src string) bool {
-	return strings.Contains(src, "typeclass ") ||
-		strings.Contains(src, "impl ") ||
-		typeInstantiationRe.MatchString(src)
+	stripped := stripComments(src)
+	return strings.Contains(stripped, "typeclass ") ||
+		strings.Contains(stripped, "impl ") ||
+		typeInstantiationRe.MatchString(stripped)
 }
 
 // typeInstantiationRe matches Type<Arg> patterns

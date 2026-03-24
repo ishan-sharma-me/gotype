@@ -1,0 +1,44 @@
+package main
+
+import "fmt"
+
+effect AskName(string)
+
+type User struct {
+	Name        string
+	FriendNames []string
+}
+
+func getName(user *User) string {
+	name := user.Name
+	if name == "" {
+		name = perform AskName.(string)
+	}
+	return name
+}
+
+func makeFriends(user1, user2 *User) {
+	user1.FriendNames = append(user1.FriendNames, getName(user2))
+	user2.FriendNames = append(user2.FriendNames, getName(user1))
+}
+
+func main() {
+	arya := &User{Name: "", FriendNames: []string{}}
+	gendry := &User{Name: "Gendry", FriendNames: []string{}}
+
+	callCount := 0
+	handle {
+		makeFriends(arya, gendry)
+	} with {
+	case AskName:
+		callCount++
+		if callCount == 1 {
+			resume("Arya Stark")
+		} else {
+			resume("Gendry")
+		}
+	}
+
+	fmt.Println(arya.Name, "friends:", arya.FriendNames)
+	fmt.Println(gendry.Name, "friends:", gendry.FriendNames)
+}

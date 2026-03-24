@@ -1,0 +1,47 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type User struct {
+	Name    string
+	Friends []string
+}
+
+func (u *User) AddFriend(name string) {
+	u.Friends = append(u.Friends, name)
+}
+
+func (u *User) Greet() string {
+	if len(u.Friends) == 0 {
+		return fmt.Sprintf("Hi, I'm %s and I have no friends yet.", u.Name)
+	}
+	return fmt.Sprintf("Hi, I'm %s and my friends are: %s",
+		u.Name, strings.Join(u.Friends, ", "))
+}
+
+func processUsers(users []*User) {
+	for i, u := range users {
+		for j, other := range users {
+			if i != j {
+				u.AddFriend(other.Name)
+			}
+		}
+	}
+}
+
+func main() {
+	users := []*User{
+		{Name: "Alice"},
+		{Name: "Bob"},
+		{Name: "Charlie"},
+	}
+
+	processUsers(users)
+
+	for _, u := range users {
+		fmt.Println(u.Greet())
+	}
+}

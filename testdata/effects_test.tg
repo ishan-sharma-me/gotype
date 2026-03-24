@@ -1,0 +1,79 @@
+package main
+
+effect AskName(string)
+effect Log(msg string)
+
+type User struct {
+	Name string
+}
+
+func getName(user *User) string {
+	name := user.Name
+	if name == "" {
+		name = perform AskName.(string)
+	}
+	return name
+}
+
+func greet(user *User) string {
+	name := getName(user)
+	perform Log("greeting " + name)
+	return "Hello, " + name
+}
+
+test "getName returns user name when set" {
+	handle {
+		user := &User{Name: "Gendry"}
+		result := getName(user)
+		assert result == "Gendry"
+	} with {
+	case AskName:
+		resume("should not reach")
+	}
+}
+
+test "getName performs AskName when name is empty" {
+	handle {
+		user := &User{Name: ""}
+		result := getName(user)
+		assert result == "Arya Stark"
+	} with {
+	case AskName:
+		resume("Arya Stark")
+	}
+}
+
+test "greet uses getName and logs" {
+	var logged []string
+	handle {
+		user := &User{Name: ""}
+		result := greet(user)
+		assert result == "Hello, Arya"
+		assert len(logged) == 1
+		assert logged[0] == "greeting Arya"
+	} with {
+	case AskName:
+		resume("Arya")
+	case Log(msg string):
+		logged = append(logged, msg)
+		resume()
+	}
+}
+
+test "multiple performs in sequence" {
+	count := 0
+	handle {
+		a := perform AskName.(string)
+		b := perform AskName.(string)
+		assert a == "first"
+		assert b == "second"
+	} with {
+	case AskName:
+		count++
+		if count == 1 {
+			resume("first")
+		} else {
+			resume("second")
+		}
+	}
+}

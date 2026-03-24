@@ -1,0 +1,63 @@
+{
+  "name": "gotype",
+  "displayName": "GoType",
+  "description": "Language support for .tg files — Go with algebraic effects",
+  "version": "0.1.0",
+  "publisher": "abstractnet",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:gotype"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gotype",
+        "aliases": [
+          "GoType",
+          "gotype",
+          "tg"
+        ],
+        "extensions": [
+          ".tg"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gotype",
+        "scopeName": "source.gotype",
+        "path": "./syntaxes/gotype.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "GoType",
+      "properties": {
+        "gotype.lspPath": {
+          "type": "string",
+          "default": "gotype-lsp",
+          "description": "Path to the gotype-lsp binary"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

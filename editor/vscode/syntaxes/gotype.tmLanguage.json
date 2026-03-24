@@ -1,0 +1,172 @@
+{
+  "scopeName": "source.gotype",
+  "name": "GoType",
+  "fileTypes": ["tg"],
+  "patterns": [
+    { "include": "#effect-declaration" },
+    { "include": "#test-block" },
+    { "include": "#handler-set" },
+    { "include": "#try-handle" },
+    { "include": "#effect-keywords" },
+    { "include": "#effect-signature" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#raw-strings" },
+    { "include": "#runes" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#operators" },
+    { "include": "#functions" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "effect-keywords": {
+      "match": "\\b(perform|handle|resume|effect|ctl|assert|handler_set)\\b",
+      "name": "keyword.control.effect.gotype"
+    },
+    "effect-declaration": {
+      "begin": "\\b(effect)\\s+(\\w+)\\s*\\{",
+      "beginCaptures": {
+        "1": { "name": "keyword.declaration.effect.gotype" },
+        "2": { "name": "entity.name.type.effect.gotype" }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "match": "\\b(ctl|fun)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "keyword.declaration.operation.gotype" },
+            "2": { "name": "entity.name.function.operation.gotype" }
+          }
+        },
+        { "include": "#types" },
+        { "include": "#comments" }
+      ]
+    },
+    "test-block": {
+      "begin": "\\b(test)\\s+(\"[^\"]*\")\\s*\\{",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.test.gotype" },
+        "2": { "name": "string.quoted.double.test-name.gotype" }
+      },
+      "end": "\\}",
+      "patterns": [
+        { "include": "$self" }
+      ]
+    },
+    "handler-set": {
+      "begin": "\\b(handler_set)\\s+(\\w+)\\s*\\{",
+      "beginCaptures": {
+        "1": { "name": "keyword.declaration.handler-set.gotype" },
+        "2": { "name": "entity.name.type.handler-set.gotype" }
+      },
+      "end": "\\}",
+      "patterns": [
+        { "include": "$self" }
+      ]
+    },
+    "try-handle": {
+      "match": "\\b(try|handle|resume\\s+with)\\b",
+      "name": "keyword.control.effect.gotype"
+    },
+    "effect-signature": {
+      "match": "\\s/\\s*\\{([^}]*)\\}",
+      "captures": {
+        "0": { "name": "meta.effect-set.gotype" },
+        "1": { "name": "entity.name.type.effect-ref.gotype" }
+      }
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.gotype",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.gotype",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.gotype",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.gotype",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "raw-strings": {
+      "name": "string.quoted.raw.gotype",
+      "begin": "`",
+      "end": "`"
+    },
+    "runes": {
+      "name": "string.quoted.single.gotype",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.gotype",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.gotype",
+          "match": "\\b0[xX][0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.gotype",
+          "match": "\\b0[oO][0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.gotype",
+          "match": "\\b0[bB][01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.gotype",
+          "match": "\\b[0-9][0-9_]*\\.[0-9_]*([eE][+-]?[0-9_]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.gotype",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "match": "\\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var)\\b",
+      "name": "keyword.control.go.gotype"
+    },
+    "types": {
+      "match": "\\b(bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr|any)\\b",
+      "name": "support.type.builtin.gotype"
+    },
+    "builtins": {
+      "match": "\\b(append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover)\\b",
+      "name": "support.function.builtin.gotype"
+    },
+    "operators": {
+      "match": "(\\+|-|\\*|/|%|&|\\||\\^|<<|>>|&\\^|&&|\\|\\||<-|==|!=|<|<=|>|>=|:=|=|\\+\\+|--)",
+      "name": "keyword.operator.gotype"
+    },
+    "functions": {
+      "match": "\\b(\\w+)(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.gotype" }
+      }
+    },
+    "identifiers": {
+      "match": "\\b[A-Z]\\w*\\b",
+      "name": "entity.name.type.exported.gotype"
+    }
+  }
+}
